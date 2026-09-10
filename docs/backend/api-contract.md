@@ -67,6 +67,7 @@ This document defines the response shape for (2). Direct client queries
 | `already_connected` | Connection request rejected -- already connected |
 | `request_pending` | Duplicate connection/join request |
 | `activity_full` | Activity already at its participant limit |
+| `invalid_area` | `area_id` does not belong to the given `location_id` (official events) |
 | `expired` | The activity/event/availability referenced has expired |
 | `rate_limited` | Too many requests/messages in the current window |
 | `invalid_time_window` | Activity start/end time is invalid (in the past, end before start, or over the 4-hour max) |
