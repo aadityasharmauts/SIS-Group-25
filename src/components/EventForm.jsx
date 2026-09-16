@@ -16,17 +16,17 @@ export default function EventForm({ onSubmit, onCancel }) {
   const handleSubmit = () => {
     if (!title.trim() || !location.trim()) return;
 
-    const latitudeNumber = Number(latitude);
-    const longitudeNumber = Number(longitude);
+    const mapXNumber = Number(mapX);
+    const mapYNumber = Number(mapY);
 
-    // Prevent invalid map coordinates
+    // Prevent invalid coordinates outside the campus image.
     if (
-      Number.isNaN(latitudeNumber) ||
-      Number.isNaN(longitudeNumber) ||
-      latitudeNumber < -90 ||
-      latitudeNumber > 90 ||
-      longitudeNumber < -180 ||
-      longitudeNumber > 180
+      Number.isNaN(mapXNumber) ||
+      Number.isNaN(mapYNumber) ||
+      mapXNumber < 0 ||
+      mapXNumber > 1824 ||
+      mapYNumber < 0 ||
+      mapYNumber > 1824
     ) {
       return;
     }
@@ -35,8 +35,8 @@ export default function EventForm({ onSubmit, onCancel }) {
       title: title.trim(),
       location: location.trim(),
       time: time.trim() || 'TBD',
-      mapX: Number(mapX),
-      mapY: Number(mapY),
+      mapX: mapXNumber,
+      mapY: mapYNumber,
     });
     
   };
@@ -44,8 +44,8 @@ export default function EventForm({ onSubmit, onCancel }) {
   const formIsInvalid =
     !title.trim() ||
     !location.trim() ||
-    !latitude.trim() ||
-    !longitude.trim();
+    !mapX.trim() ||
+    !mapY.trim();
 
   return (
     <div className="rounded-2xl border border-orange-200 bg-white p-5">
@@ -114,7 +114,7 @@ export default function EventForm({ onSubmit, onCancel }) {
       value={mapX}
       onChange={event => setMapX(event.target.value)}
       min="0"
-      max="1024"
+      max="1824"
       className={inputClass}
     />
   </div>
@@ -129,7 +129,7 @@ export default function EventForm({ onSubmit, onCancel }) {
       value={mapY}
       onChange={event => setMapY(event.target.value)}
       min="0"
-      max="1024"
+      max="1824"
       className={inputClass}
     />
   </div>
