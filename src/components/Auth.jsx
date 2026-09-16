@@ -1,35 +1,51 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function Auth({ mode, onBack, onSuccess }) {
+export default function Auth({ mode, onBack, onSuccess, onOpenLegal }) {
   const [isSignUp, setIsSignUp] = useState(mode === 'signup');
 
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
           password,
           options: {
-            data: { full_name: fullName },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: {
+              display_name: fullName.trim(),
+              terms_accepted: termsAccepted,
+              privacy_accepted: privacyAccepted,
+            },
           },
         });
         if (error) throw error;
+
+        // With email confirmation enabled there is no session yet. Keep the
+        // user on the auth screen so they can confirm their email first.
+        if (!data.session) {
+          setSuccessMsg('Account created. Check your email to confirm your account before signing in.');
+          return;
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim().toLowerCase(),
           password,
         });
         if (error) throw error;
@@ -37,7 +53,14 @@ export default function Auth({ mode, onBack, onSuccess }) {
 
       onSuccess();
     } catch (err) {
-      setErrorMsg(err.message);
+      const message = err?.message ?? 'Unable to complete authentication.';
+      if (message.includes('[invalid_domain]')) {
+        setErrorMsg('Use an approved university or organisation email address.');
+      } else if (message.includes('[consent_required]')) {
+        setErrorMsg('Accept the Terms and Privacy Policy to continue.');
+      } else {
+        setErrorMsg(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -71,11 +94,17 @@ export default function Auth({ mode, onBack, onSuccess }) {
           </div>
         )}
 
+        {successMsg && (
+          <div className="bg-green-50 text-green-700 text-xs p-3 rounded-lg border border-green-100">
+            {successMsg}
+          </div>
+        )}
+
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
           {isSignUp && (
-            <div>
+          <div>
               <label className="block text-xs font-medium text-neutral-700 mb-1">Full Name</label>
               <input 
                 type="text" 
@@ -112,6 +141,57 @@ export default function Auth({ mode, onBack, onSuccess }) {
             />
           </div>
 
+          {isSignUp && (
+            <div className="space-y-2 rounded-lg bg-neutral-50 p-3 text-xs text-neutral-600">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  required
+                  className="mt-0.5 accent-orange-600"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a
+                    href="/terms"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onOpenLegal('terms', isSignUp ? 'signup' : 'signin');
+                    }}
+                    className="text-orange-700 underline hover:text-orange-800"
+                  >
+                    Terms of Service
+                  </a>
+                  .
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={privacyAccepted}
+                  onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                  required
+                  className="mt-0.5 accent-orange-600"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a
+                    href="/privacy"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onOpenLegal('privacy', isSignUp ? 'signup' : 'signin');
+                    }}
+                    className="text-orange-700 underline hover:text-orange-800"
+                  >
+                    Privacy Policy
+                  </a>
+                  .
+                </span>
+              </label>
+            </div>
+          )}
+
 
           <button
             type="submit"
@@ -133,6 +213,32 @@ export default function Auth({ mode, onBack, onSuccess }) {
             {isSignUp ? 'Sign In' : 'Sign Up'}
           </button>
         </div>
+
+        <p className="text-center text-xs leading-5 text-neutral-500">
+          By {isSignUp ? 'signing up' : 'signing in'}, you agree to our{' '}
+          <a
+            href="/terms"
+            onClick={(event) => {
+              event.preventDefault();
+              onOpenLegal('terms', isSignUp ? 'signup' : 'signin');
+            }}
+            className="text-orange-700 underline hover:text-orange-800"
+          >
+            Terms of Service
+          </a>{' '}
+          and{' '}
+          <a
+            href="/privacy"
+            onClick={(event) => {
+              event.preventDefault();
+              onOpenLegal('privacy', isSignUp ? 'signup' : 'signin');
+            }}
+            className="text-orange-700 underline hover:text-orange-800"
+          >
+            Privacy Policy
+          </a>
+          .
+        </p>
       </div>
     </div>
   );

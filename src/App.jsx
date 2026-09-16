@@ -9,6 +9,7 @@ import EventCard from './components/EventCard';
 import EventForm from './components/EventForm';
 import EventDetails from './components/EventDetails';
 import CampusMap from './components/CampusMap';
+import LegalPage from './components/LegalPage';
 
 import { CURRENT_USER, SEED_FEED, SAMPLE_EVENT } from './constants/seed';
 import { makeId, initials } from './utils/helpers';
@@ -16,8 +17,13 @@ import { makeId, initials } from './utils/helpers';
 // --- Main App ---
 
 export default function App() {
-  const [page, setPage] = useState('landing'); 
+  const [page, setPage] = useState(() => {
+    if (window.location.pathname === '/terms') return 'terms';
+    if (window.location.pathname === '/privacy') return 'privacy';
+    return 'landing';
+  });
   const [authMode, setAuthMode] = useState('signin');
+  const [legalReturnPage, setLegalReturnPage] = useState('landing');
   const [feed, setFeed] = useState(SEED_FEED);
   const [showEventForm, setShowEventForm] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -72,6 +78,26 @@ export default function App() {
 
   const currentEvent = selectedEvent ?? SAMPLE_EVENT;
 
+  const navigate = (nextPage, path) => {
+    window.history.pushState({}, '', path);
+    setPage(nextPage);
+  };
+
+  const openLegal = (type, mode = authMode) => {
+    setLegalReturnPage(page === 'terms' || page === 'privacy' ? 'landing' : page);
+    setAuthMode(mode);
+    navigate(type, `/${type}`);
+  };
+
+  const closeLegal = () => {
+    const returnPage = legalReturnPage === 'auth' ? 'auth' : 'landing';
+    navigate(returnPage, '/');
+  };
+
+  if (page === 'terms' || page === 'privacy') {
+    return <LegalPage type={page} onBack={closeLegal} />;
+  }
+
 
   // Render the Landing page view when page state is 'landing'
   if (page === 'landing') {
@@ -92,6 +118,7 @@ export default function App() {
         mode={authMode} 
         onBack={() => setPage('landing')} 
         onSuccess={() => setPage('feed')} 
+        onOpenLegal={openLegal}
       />
     );
   }
