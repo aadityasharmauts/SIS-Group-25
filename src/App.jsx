@@ -10,6 +10,7 @@ import EventForm from './components/EventForm';
 import EventDetails from './components/EventDetails';
 import CampusMap from './components/CampusMap';
 import LegalPage from './components/LegalPage';
+import Profile from './components/Profile';
 
 import { CURRENT_USER, SEED_FEED, SAMPLE_EVENT } from './constants/seed';
 import { makeId, initials } from './utils/helpers';
@@ -134,6 +135,7 @@ export default function App() {
         onBack={() => setPage('feed')}
         showEventForm={showEventForm}
         onToggle={() => setShowEventForm(f => !f)}
+        onNavigate={(nextPage) => setPage(nextPage)}
     />
 
 {page === 'event' ? (
@@ -142,6 +144,8 @@ export default function App() {
     joined={joined}
     onJoin={() => setJoined(true)}
   />
+) : page === 'profile' ? (
+  <Profile />        
 ) : (
   <div className="grid gap-6 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-start">
     {/* Feed on the left */}

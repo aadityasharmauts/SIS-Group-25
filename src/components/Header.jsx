@@ -1,8 +1,8 @@
-export default function Header({ page, onBack, showEventForm, onToggle }) {
+export default function Header({ page, onBack, showEventForm, onToggle, onNavigate }) {
     return (
       <header className="bg-white border border-neutral-100 rounded-2xl px-4 py-3 flex justify-between items-center sticky top-4 z-10 mb-5 shadow-sm">
         <div className="flex items-center gap-2.5">
-          {page === 'event' ? (
+          {page === 'event' || page === 'profile' ? (
             <button
               type="button"
               onClick={onBack}
@@ -25,6 +25,13 @@ export default function Header({ page, onBack, showEventForm, onToggle }) {
         <div className="flex items-center gap-2">
           {page === 'feed' && (
             <>
+            <button
+                onClick={() => onNavigate('profile')}
+                className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-3 py-2 rounded-xl transition-colors"
+              >
+                Profile
+              </button>
+              
               <div className="flex items-center gap-1.5 text-xs text-neutral-500 bg-white border border-neutral-100 rounded-full px-3 py-1">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />

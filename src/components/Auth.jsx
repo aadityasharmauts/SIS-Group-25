@@ -110,7 +110,7 @@ export default function Auth({ mode, onBack, onSuccess, onOpenLegal }) {
                 type="text" 
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Salha Alghoraibi" 
+                placeholder="Your full name" 
                 required
                 className="w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
