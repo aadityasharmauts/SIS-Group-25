@@ -15,7 +15,7 @@ import CalendarView from './components/CalendarView';
 import UserProfileModal from './components/UserProfileModal';
 
 import { supabase } from './lib/supabaseClient';
-import { CURRENT_USER, SAMPLE_EVENT, SEED_FEED } from './constants/seed';
+import { createExampleEvents, CURRENT_USER, SAMPLE_EVENT, SEED_FEED } from './constants/seed';
 import { makeId, initials } from './utils/helpers';
 import {
   createActivity,
@@ -23,6 +23,7 @@ import {
   joinActivity,
   loadActiveMapPoints,
   loadAreas,
+  loadExampleHosts,
   mapPointToFeedItem,
   rsvpToEvent,
   subscribeToMapChanges,
@@ -54,13 +55,17 @@ export default function App() {
     if (!session) return;
     setLoadingFeed(true);
     try {
-      const points = await loadActiveMapPoints();
+      const [points, exampleHosts] = await Promise.all([
+        loadActiveMapPoints(),
+        loadExampleHosts(),
+      ]);
       const hostFallback = session?.user?.user_metadata?.display_name || CURRENT_USER;
       const remoteEvents = points
         .filter((point) => point.point_type === 'activity' || point.point_type === 'official_event')
         .map((point) => mapPointToFeedItem(point, hostFallback));
       setFeed((previous) => [
         ...previous.filter((item) => item.type === 'status'),
+        ...createExampleEvents(exampleHosts),
         ...remoteEvents,
       ]);
       setEventError(null);
@@ -284,7 +289,7 @@ export default function App() {
               <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
                 {[
                   { label: 'All', value: 'all' },
-                  { label: 'Study session', value: 'study session' },
+                  { label: 'Study session', value: 'study_session' },
                   { label: 'Coffee break', value: 'coffee_break' },
                   { label: 'Lunch', value: 'lunch' },
                   { label: 'Walk', value: 'walk' },

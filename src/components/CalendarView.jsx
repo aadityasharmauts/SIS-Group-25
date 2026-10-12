@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Calendar as CalendarIcon, Clock, MapPin, CheckCircle2 } from 'lucide-react';
-import { cancelCalendarEvent, loadCalendarEvents, subscribeToCalendarChanges } from '../services/events';
+import { CheckCircle2, Clock, MapPin } from 'lucide-react';
+import {
+  cancelCalendarEvent,
+  loadCalendarEvents,
+  subscribeToCalendarChanges,
+} from '../services/events';
 
 export default function CalendarView() {
-  const [acceptedEvents, setAcceptedEvents] = useState([]);
+  const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [cancellingId, setCancellingId] = useState(null);
+  const [leavingId, setLeavingId] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      setAcceptedEvents(await loadCalendarEvents());
+      setEvents(await loadCalendarEvents());
     } catch (loadError) {
-      setError(loadError?.message ?? 'Unable to load your RSVP calendar.');
+      setError(loadError?.message ?? 'Unable to load your events.');
     } finally {
       setLoading(false);
     }
@@ -25,91 +29,88 @@ export default function CalendarView() {
     return unsubscribe;
   }, [refresh]);
 
-  const handleCancel = async (event) => {
-    setCancellingId(event.id);
+  const handleLeave = async (event) => {
+    setLeavingId(event.id);
     try {
       await cancelCalendarEvent(event);
       await refresh();
-    } catch (cancelError) {
-      setError(cancelError?.message ?? 'Unable to cancel this RSVP.');
+    } catch (leaveError) {
+      setError(leaveError?.message ?? 'Unable to leave this event.');
     } finally {
-      setCancellingId(null);
+      setLeavingId(null);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* Header Card */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Accepted Events Calendar</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage and track all the campus sessions and sprints you've RSVP'd to.</p>
-        </div>
-        <div className="p-3 rounded-2xl bg-orange-50 text-orange-600">
-          <CalendarIcon size={28} />
-        </div>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-5 p-3 sm:p-6">
+      <header className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+        <h1 className="text-2xl font-bold text-slate-950">My events</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Events you have joined or RSVP’d to.
+        </p>
+      </header>
 
-      {/* Events List Grid / Timeline */}
-      <div className="space-y-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-1">Upcoming RSVP'd Schedule</h3>
-        
-        {loading ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-slate-100 text-slate-400">
-            Loading your RSVP calendar…
-          </div>
-        ) : error ? (
-          <div role="alert" className="bg-red-50 rounded-2xl p-6 border border-red-100 text-sm text-red-700">
-            {error}
-          </div>
-        ) : acceptedEvents.length > 0 ? (
-          acceptedEvents.map((event) => (
-            <div 
-              key={event.id}
-              className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-orange-200"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-orange-50 text-orange-600">
-                    <CheckCircle2 size={12} />
-                    {event.rsvpStatus === 'interested' ? 'Interested' : event.rsvpStatus === 'pending' ? 'Request pending' : 'RSVP Confirmed'}
-                  </span>
-                  <span className="text-xs text-slate-400">• Hosted by {event.host}</span>
-                </div>
-                
-                <h4 className="text-lg font-bold text-slate-900">{event.title}</h4>
-                
-                <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 pt-1">
-                  <span className="flex items-center gap-1.5">
-                    <Clock size={18} strokeWidth={2.25} className="text-orange-500" />
-                    {event.time}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <MapPin size={14} className="text-orange-500" />
-                    {event.location}
-                  </span>
-                </div>
-              </div>
+      {error && (
+        <p role="alert" className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
-              <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                <button 
-                  onClick={() => handleCancel(event)}
-                  disabled={cancellingId === event.id}
-                  className="px-4 py-2 bg-slate-50 hover:bg-rose-50 hover:text-rose-600 text-slate-600 text-sm font-medium rounded-xl transition-colors border border-slate-200 hover:border-rose-100"
+      {loading ? (
+        <div className="rounded-2xl border border-slate-100 bg-white p-12 text-center text-sm text-slate-400">
+          Loading your events…
+        </div>
+      ) : events.length === 0 ? (
+        <div className="rounded-2xl border border-slate-100 bg-white p-12 text-center shadow-sm">
+          <CheckCircle2 size={42} className="mx-auto mb-3 text-slate-300" />
+          <p className="font-medium text-slate-700">No accepted events yet.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Events will appear here after your request is accepted or your RSVP is confirmed.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {events.map((event) => (
+            <article key={event.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-colors hover:border-orange-200">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-orange-50 px-2 py-1 text-[11px] font-semibold text-orange-700">
+                      <CheckCircle2 size={12} />
+                      {event.rsvpStatus === 'interested' ? 'Interested' : 'Accepted'}
+                    </span>
+                    <span className="text-xs text-slate-400">Hosted by {event.host}</span>
+                  </div>
+
+                  <h2 className="text-lg font-bold text-slate-900">{event.title}</h2>
+
+                  <div className="mt-3 flex flex-col gap-2 text-sm text-slate-500 md:flex-row md:flex-wrap md:gap-5">
+                    <span className="flex items-start gap-2">
+                      <Clock size={16} className="mt-0.5 shrink-0 text-orange-500" />
+                      {event.time}
+                    </span>
+                    <span className="flex items-start gap-2">
+                      <MapPin size={16} className="mt-0.5 shrink-0 text-orange-500" />
+                      {event.location}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleLeave(event)}
+                  disabled={leavingId === event.id}
+                  className="shrink-0 rounded-xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {cancellingId === event.id ? 'Updating…' : event.eventType === 'official_event' ? 'Cancel RSVP' : 'Leave event'}
+                  {leavingId === event.id
+                    ? 'Leaving…'
+                    : event.eventType === 'official_event' ? 'Cancel RSVP' : 'Leave event'}
                 </button>
               </div>
-            </div>
-          ))
-        ) : (
-          <div className="bg-white rounded-2xl p-12 text-center border border-slate-100 text-slate-400">
-            <CalendarIcon size={48} className="mx-auto mb-3 text-slate-300" />
-            <p className="text-base font-medium text-slate-700">No upcoming events on your calendar yet.</p>
-            <p className="text-sm text-slate-400 mt-1">RSVP to events from the live feed to see them show up here!</p>
-          </div>
-        )}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

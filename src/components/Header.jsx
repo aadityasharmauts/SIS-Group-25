@@ -33,7 +33,7 @@ export default function Header({ page, onBack, showEventForm, onToggle, onNaviga
               className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5"
             >
            <Calendar size={14} />
-               Calendar
+               My events
             </button>
 
             <button

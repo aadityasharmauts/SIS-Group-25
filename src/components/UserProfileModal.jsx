@@ -18,7 +18,7 @@ export default function UserProfileModal({ userId, onClose }) {
         // Fetch profile details
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, full_name, avatar_url, bio, created_at')
+          .select('id, display_name, avatar_url, bio, created_at')
           .eq('id', userId)
           .single();
 
@@ -76,9 +76,9 @@ export default function UserProfileModal({ userId, onClose }) {
             {/* User Header Info */}
             <div className="flex flex-col items-center text-center pb-6 border-b border-neutral-100">
               <div className="mb-3">
-                <Avatar name={profile.full_name} variant="pro" />
+                <Avatar name={profile.display_name} variant="pro" />
               </div>
-              <h3 className="text-lg font-bold text-neutral-950">{profile.full_name}</h3>
+              <h3 className="text-lg font-bold text-neutral-950">{profile.display_name}</h3>
               <p className="text-xs text-neutral-500 mt-1 max-w-xs">
                 {profile.bio || 'Active member of the Recess community.'}
               </p>
