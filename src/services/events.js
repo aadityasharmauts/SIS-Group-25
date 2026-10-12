@@ -47,6 +47,18 @@ export async function loadAreas() {
   return data ?? [];
 }
 
+export async function loadExampleHosts() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .eq('account_status', 'verified')
+    .not('display_name', 'is', null)
+    .order('created_at')
+    .limit(4);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function createActivity(payload) {
   return invokeWithLocalFallback('create-activity', payload, async () => {
     const { data, error } = await supabase
@@ -90,7 +102,7 @@ export async function loadCalendarEvents() {
     supabase
       .from('activity_participants')
       .select('activity_id, status, created_at')
-      .in('status', ['pending', 'accepted']),
+      .eq('status', 'accepted'),
   ]);
 
   if (rsvpError) throw rsvpError;
@@ -105,12 +117,14 @@ export async function loadCalendarEvents() {
         .from('official_events')
         .select('id, title, description, location_id, area_id, latitude, longitude, start_time, end_time, status, locations(name), areas(name), organisations(name)')
         .in('id', eventIds)
+        .gte('end_time', new Date().toISOString())
       : Promise.resolve({ data: [], error: null }),
     activityIds.length
       ? supabase
         .from('activities')
         .select('id, title, description, category, location_label, latitude, longitude, start_time, end_time, status, areas(name, locations(name)), creator:profiles!creator_id(display_name)')
         .in('id', activityIds)
+        .gte('end_time', new Date().toISOString())
       : Promise.resolve({ data: [], error: null }),
   ]);
 
