@@ -70,8 +70,8 @@ export default function EventForm({
   const [category, setCategory] = useState(initialData?.category || CATEGORY_OPTIONS[0].id);
   const [tags, setTags] = useState(initialData?.tags || []);
   const [tagDraft, setTagDraft] = useState('');
-  const [participantLimit, setParticipantLimit] = useState(String(initialData?.participantLimit || '3'));
-  const [areaId, setAreaId] = useState(initialData?.areaId || '');
+  const participantLimit = String(initialData?.participantLimit || '3');
+  const areaId = initialData?.areaId || '';
   const [startTime, setStartTime] = useState(() =>
     initialData?.startTime ? toLocalDateTime(new Date(initialData.startTime)) : toLocalDateTime(new Date(Date.now() + 30 * 60 * 1000))
   );
@@ -147,17 +147,6 @@ export default function EventForm({
     || !isValidCoordinates(position[0], position[1])
     || !markerWithinArea;
 
-  const handleAreaChange = event => {
-    const nextAreaId = event.target.value;
-    setAreaId(nextAreaId);
-
-    const nextArea = areas.find(area => area.id === nextAreaId);
-    const latitude = nextArea?.locations?.latitude;
-    const longitude = nextArea?.locations?.longitude;
-
-    if (isValidCoordinates(latitude, longitude)) setPosition([latitude, longitude]);
-  };
-
   const handleSubmit = event => {
     event.preventDefault();
     if (formIsInvalid) return;
@@ -231,57 +220,20 @@ export default function EventForm({
       </label>
 
       <label className={labelClass}>
-        <span className={labelTextClass}>Area</span>
+        <span className={labelTextClass}>Category</span>
 
         <select
-          value={effectiveAreaId}
-          onChange={handleAreaChange}
-          required
+          value={category}
+          onChange={event => setCategory(event.target.value)}
           className={field}
         >
-          <option value="">Select an approved campus area</option>
-
-          {areas.map(area => (
-            <option key={area.id} value={area.id}>
-              {area.name}
+          {CATEGORY_OPTIONS.map(option => (
+            <option key={option.id} value={option.id}>
+              {option.emoji} {option.label}
             </option>
           ))}
         </select>
       </label>
-
-      <div className="grid grid-cols-2 gap-2">
-        <label className={labelClass}>
-          <span className={labelTextClass}>Category</span>
-
-          <select
-            value={category}
-            onChange={event => setCategory(event.target.value)}
-            className={field}
-          >
-            {CATEGORY_OPTIONS.map(option => (
-              <option key={option.id} value={option.id}>
-                {option.emoji} {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className={labelClass}>
-          <span className={labelTextClass}>Places available</span>
-
-          <select
-            value={participantLimit}
-            onChange={event => setParticipantLimit(event.target.value)}
-            className={field}
-          >
-            {[1, 2, 3, 4, 5].map(value => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
 
       <p className={`text-[11px] ${c.text}`}>
         {c.emoji} {c.label} sets this event's colour on the feed, the details
