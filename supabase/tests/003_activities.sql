@@ -9,7 +9,7 @@
 -- capacity/rate-limit logic behaves, not just that it exists.
 
 begin;
-select plan(37);
+select plan(40);
 
 create or replace function pg_temp.create_test_user(
   p_email text,
@@ -58,14 +58,17 @@ select has_table('public', 'activities', 'activities table exists');
 select has_table('public', 'activity_participants', 'activity_participants table exists');
 select has_column('public', 'activities', 'participant_limit', 'activities has participant_limit');
 select has_column('public', 'activity_participants', 'is_creator', 'activity_participants has is_creator');
+select has_column('public', 'activities', 'location_label', 'activities has public location label');
+select has_column('public', 'activities', 'latitude', 'activities has public marker latitude');
+select has_column('public', 'activities', 'longitude', 'activities has public marker longitude');
 
 select ok(
   not exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'activities'
-      and column_name in ('address', 'latitude', 'longitude')
+      and column_name = 'address'
   ),
-  'activities has no address/latitude/longitude column -- location is only ever area_id'
+  'activities has no private address column -- area_id remains required'
 );
 
 -- ---------------------------------------------------------------------

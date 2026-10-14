@@ -13,12 +13,19 @@ Same architecture as Phases 1-2: every rule is enforced by the database
 **`public.activities`**
 
 - `creator_id` -- the verified user who created it.
-- `area_id` -- always an approved `public.areas` row, never a free-text
-  address or lat/lng (PRD 8.5: "users cannot enter private addresses").
+- `area_id` -- always an approved `public.areas` row. The activity may also
+  store a public venue label and marker coordinates; these are never a user's
+  live position or a private address.
+- `location_label`, `latitude`, `longitude` -- optional public meeting-point
+  details used by the event map. Coordinates are range-checked and must be
+  supplied as a pair. The approved `area_id` remains mandatory for privacy.
 - `title`, `description`, `category`.
+- `tags` -- optional audience labels, limited to six values.
 - `start_time` / `end_time` -- must fit in a 4-hour window.
 - `participant_limit` -- 1 to 5, default 3. This is the number of *other*
   people who can join; it does not count the creator.
+- Public marker coordinates must be within 250 metres of the selected area's
+  approved location. The marker is a meeting point, not a user's position.
 - `status` -- only `open` or `cancelled` is stored. "Full" and "expired" are
   derived (from `activity_accepted_count()` and `end_time`), not columns,
   so nothing needs a scheduler to keep them in sync.
@@ -42,9 +49,13 @@ const { data, error } = await supabase
     title,
     description,
     category,
+    tags: ['first years', 'exam prep'],
     start_time: startTime.toISOString(),
     end_time: endTime.toISOString(),
     participant_limit: 3,
+    location_label: 'UTS Building 11, Lab 302',
+    latitude: -33.8832,
+    longitude: 151.2006,
   })
   .select()
   .single()
@@ -93,10 +104,12 @@ status changes so history stays available for moderation and reports
 Requesting to join creates a `pending` row:
 
 ```js
-await supabase.from('activity_participants').insert({ activity_id: activityId })
+await supabase.from('activity_participants').insert({ activity_id: activityId, user_id: me.id })
 ```
 
-`user_id` must equal `auth.uid()`. Rejected with `[activity_cancelled]` /
+`user_id` must equal `auth.uid()`. Requests are limited to 10 an hour per
+user (`[rate_limited]`), and you can't request to join an activity whose
+creator is on the other side of a block (`[forbidden]`). Rejected with `[activity_cancelled]` /
 `[expired]` / `[activity_full]` as appropriate, or `[forbidden]` if the
 creator tries to request to join their own activity, or a duplicate-key
 error if they've already requested (the unique constraint on
@@ -118,7 +131,9 @@ reverse; a declined participant cannot make themselves
 `pending` or `accepted` again. A participant can only ever set their own
 row to `left`. Anything else raises `[invalid_transition]`. The creator's
 own auto-inserted row can never change status at all -- cancel the
-activity instead.
+activity instead. If there's a block between the creator and a
+participant, the creator can also remove them (`accepted -> declined`),
+and can't accept their request.
 
 `activity_accepted_count(activity_id)` (a `security definer` SQL function)
 is what `participant_limit` is checked against, and is safe to call from the
@@ -129,7 +144,9 @@ frontend too if you need the current headcount without a full row fetch.
 A verified user sees an activity if it's open and unexpired, or if they're
 the creator, or if they're an accepted participant -- so a creator or
 accepted participant keeps seeing their own activity even after it expires
-or fills up. Unverified users see nothing. This is enforced by the
+or fills up. Unverified users see nothing. A block between the viewer and
+the creator hides the activity from the viewer (the creator always sees
+their own) -- see `docs/backend/moderation.md`. This is enforced by the
 `activities` and `activity_participants` SELECT policies directly; there is
 also a `can_view_activity(activity_id)` helper function with the same logic
 for use in application code, but it's deliberately not what the policy
@@ -154,6 +171,11 @@ const channel = supabase
   .subscribe()
 ```
 
+The frontend uses the `create-activity` Edge Function for this write. The
+function forwards the request through the caller's Supabase JWT, so the same
+RLS, trigger and rate-limit rules apply. A direct `supabase-js` insert is kept
+as a local-development fallback when the Edge Function runtime is not running.
+
 RLS still applies to Realtime -- a subscriber only receives change events for
 rows they could `select` anyway.
 
@@ -162,7 +184,7 @@ rows they could `select` anyway.
 | Prefix | User-facing meaning |
 |---|---|
 | `[invalid_time_window]` | Fix the start/end time (past, backwards, or over 4 hours). |
-| `[rate_limited]` | You already have 3 open activities -- cancel or wait for one to finish. |
+| `[rate_limited]` | You already have 3 open activities, or you've sent 10 join requests in the last hour. |
 | `[activity_full]` | This activity is already at its participant limit. |
 | `[activity_cancelled]` | This activity has been cancelled. |
 | `[expired]` | This activity has already ended. |

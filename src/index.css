@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+/* Leaflet's default divIcon paints a white box with a border — remove it */
+.campus-pin {
+    background: none;
+    border: 0;
+  }
+  
+  .campus-pin__svg {
+    display: block;
+    transform-origin: 50% 100%;
+    transition: transform 120ms ease-out;
+  }
+  
+  .leaflet-marker-icon.campus-pin:hover .campus-pin__svg {
+    transform: scale(1.12);
+  }
+  
+  .leaflet-popup-content-wrapper {
+    border-radius: 12px;
+  }
+  
+  .leaflet-popup-content {
+    margin: 12px 14px;
+    font-family: inherit;
+  }

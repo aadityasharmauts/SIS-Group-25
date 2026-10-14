@@ -41,17 +41,27 @@ that are safe to be public.
 
 ## Server-side / Edge Function secrets (not in this .env)
 
-The `service_role` key and anything else that must bypass RLS (used inside
-Supabase Edge Functions, e.g. `create-official-event`, `block-user`) is
-**never** stored in this frontend `.env` or committed to the repo. Those
-go into Supabase's own function secrets once Edge Functions are set up:
+The `service_role` key and anything else that must bypass RLS is **never**
+stored in this frontend `.env` or committed to the repo. The event Edge
+Functions in this repository use the caller's JWT and do not require a
+service-role key. If a future privileged function needs one, store it only in
+Supabase's function secrets:
 
 ```bash
 supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... 
 ```
 
-This will be documented further when Edge Functions are added
-(later Phase 0/1 tasks — Supabase migrations, Auth).
+Deploy the current event functions with:
+
+```bash
+supabase functions deploy create-activity
+supabase functions deploy create-official-event
+supabase functions deploy rsvp-to-event
+```
+
+For local development, run `supabase functions serve` alongside the Vite
+server. The frontend falls back to the same RLS-protected PostgREST operation
+when the local Edge Function runtime is not running.
 
 ## Using the client in code
 

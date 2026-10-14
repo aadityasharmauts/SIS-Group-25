@@ -3,12 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Fails fast with a legible message: createClient(undefined, undefined)
+// throws an opaque "supabaseUrl is required" and blanks the whole app.
 if (!supabaseUrl || !supabaseAnonKey) {
-  // Fails loudly in dev instead of silently breaking every Supabase call.
-  console.error(
-    'Missing Supabase environment variables. Copy .env.example to .env ' +
-      'and fill in VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. ' +
-      'See docs/backend/environment-setup.md.'
+  throw new Error(
+    'Missing Supabase environment variables. Create a file named exactly ".env" ' +
+      'at the project root, next to package.json, containing ' +
+      'VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Then restart the dev server ' +
+      '(Vite only reads .env at startup).'
   )
 }
 

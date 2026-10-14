@@ -1,16 +1,74 @@
-import { makeId } from '../utils/helpers';
-
 export const CURRENT_USER = 'Salha';
 
 export const PRESENCE_USERS = ['Salha', 'Ahmed', 'Saba', 'Jay'];
 
-export const SEED_FEED = [
-  { id: makeId(), type: 'event', title: 'Capstone sprint — frontend sync', location: 'UTS Library, Level 4', time: '2:00 PM', author: 'Salha',  latitude: -33.8832,
-    longitude: 151.2006 },
-  { id: makeId(), type: 'status', text: 'Working on software engineering capstone architecture', time: '10 min ago', author: 'Ahmed' },
-  { id: makeId(), type: 'status', text: 'Anyone in the DB labs? Looking for a study buddy til 5pm', time: '22 min ago', author: 'Saba' },
-  { id: makeId(), type: 'event', title: 'Coffee run — Tower Building cafe', location: 'Tower Building, Ground Floor', time: '3:30 PM', author: 'Jay' },
+
+const EXAMPLE_EVENT_TEMPLATES = [
+  {
+    id: 'example-study-group',
+    title: 'Library study sprint',
+    description: 'A focused study block with a short break halfway through.',
+    location: 'UTS Library, Level 4',
+    category: 'study_session',
+    tags: ['study focused', 'all courses'],
+    startsInHours: 1,
+    latitude: -33.8832,
+    longitude: 151.2006,
+  },
+  {
+    id: 'example-coffee-break',
+    title: 'Coffee between classes',
+    description: 'Grab a coffee and meet someone new before the next class.',
+    location: 'Central Park Cafe',
+    category: 'coffee_break',
+    tags: ['new students', 'casual chat'],
+    startsInHours: 2.5,
+    latitude: -33.8830,
+    longitude: 151.1996,
+  },
+  {
+    id: 'example-lunch',
+    title: 'Lunch at Central Food Court',
+    description: 'A relaxed group lunch for anyone who wants some company.',
+    location: 'Central Food Court',
+    category: 'lunch',
+    tags: ['everyone welcome', 'quick lunch'],
+    startsInHours: 4,
+    latitude: -33.8836,
+    longitude: 151.2008,
+  },
 ];
+
+const formatExampleTime = (start, end) => {
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+};
+
+export function createExampleEvents(profiles = []) {
+  const now = new Date();
+
+  return EXAMPLE_EVENT_TEMPLATES.map((template, index) => {
+    const profile = profiles[index % profiles.length];
+    const start = new Date(now.getTime() + template.startsInHours * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+    return {
+      ...template,
+      type: 'event',
+      source: 'example',
+      time: formatExampleTime(start, end),
+      author: profile?.display_name?.trim() || PRESENCE_USERS[index % PRESENCE_USERS.length],
+      userId: profile?.id,
+    };
+  });
+}
+
+export const SEED_FEED = createExampleEvents();
+
 
 export const SAMPLE_EVENT = {
   title: 'Capstone study session',
