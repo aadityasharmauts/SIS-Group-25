@@ -104,10 +104,12 @@ status changes so history stays available for moderation and reports
 Requesting to join creates a `pending` row:
 
 ```js
-await supabase.from('activity_participants').insert({ activity_id: activityId })
+await supabase.from('activity_participants').insert({ activity_id: activityId, user_id: me.id })
 ```
 
-`user_id` must equal `auth.uid()`. Rejected with `[activity_cancelled]` /
+`user_id` must equal `auth.uid()`. Requests are limited to 10 an hour per
+user (`[rate_limited]`), and you can't request to join an activity whose
+creator is on the other side of a block (`[forbidden]`). Rejected with `[activity_cancelled]` /
 `[expired]` / `[activity_full]` as appropriate, or `[forbidden]` if the
 creator tries to request to join their own activity, or a duplicate-key
 error if they've already requested (the unique constraint on
@@ -129,7 +131,9 @@ reverse; a declined participant cannot make themselves
 `pending` or `accepted` again. A participant can only ever set their own
 row to `left`. Anything else raises `[invalid_transition]`. The creator's
 own auto-inserted row can never change status at all -- cancel the
-activity instead.
+activity instead. If there's a block between the creator and a
+participant, the creator can also remove them (`accepted -> declined`),
+and can't accept their request.
 
 `activity_accepted_count(activity_id)` (a `security definer` SQL function)
 is what `participant_limit` is checked against, and is safe to call from the
@@ -140,7 +144,9 @@ frontend too if you need the current headcount without a full row fetch.
 A verified user sees an activity if it's open and unexpired, or if they're
 the creator, or if they're an accepted participant -- so a creator or
 accepted participant keeps seeing their own activity even after it expires
-or fills up. Unverified users see nothing. This is enforced by the
+or fills up. Unverified users see nothing. A block between the viewer and
+the creator hides the activity from the viewer (the creator always sees
+their own) -- see `docs/backend/moderation.md`. This is enforced by the
 `activities` and `activity_participants` SELECT policies directly; there is
 also a `can_view_activity(activity_id)` helper function with the same logic
 for use in application code, but it's deliberately not what the policy
@@ -178,7 +184,7 @@ rows they could `select` anyway.
 | Prefix | User-facing meaning |
 |---|---|
 | `[invalid_time_window]` | Fix the start/end time (past, backwards, or over 4 hours). |
-| `[rate_limited]` | You already have 3 open activities -- cancel or wait for one to finish. |
+| `[rate_limited]` | You already have 3 open activities, or you've sent 10 join requests in the last hour. |
 | `[activity_full]` | This activity is already at its participant limit. |
 | `[activity_cancelled]` | This activity has been cancelled. |
 | `[expired]` | This activity has already ended. |

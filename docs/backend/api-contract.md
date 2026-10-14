@@ -75,6 +75,9 @@ This document defines the response shape for (2). Direct client queries
 | `activity_cancelled` | The activity has been cancelled and can no longer be joined or edited |
 | `invalid_transition` | The requested participant status change isn't allowed (e.g. a declined request trying to become pending/accepted again) |
 
+Blocks are deliberately reported as `forbidden`, not `blocked`, so a
+blocked user can't tell -- see `docs/backend/moderation.md`.
+
 Add new codes here as each phase's Edge Functions are implemented --
 this table is the shared contract frontend can rely on across phases.
 
