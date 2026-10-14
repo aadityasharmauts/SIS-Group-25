@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(30);
+select plan(43);
 
 create or replace function pg_temp.create_test_user(
   p_email text,
@@ -109,6 +109,7 @@ select has_function('public', 'area_compatibility', array['uuid', 'uuid'], 'area
 select has_function('public', 'availability_overlap_minutes', array['uuid', 'uuid'], 'availability_overlap_minutes(uuid, uuid) exists');
 select has_function('public', 'shared_interest_count', array['uuid', 'uuid'], 'shared_interest_count(uuid, uuid) exists');
 select has_function('public', 'matching_candidates', array['uuid'], 'matching_candidates(uuid) exists');
+select has_function('public', 'matching_suggestions', array['uuid'], 'matching_suggestions(uuid) exists');
 
 -- ---------------------------------------------------------------------
 -- 6-9. Area compatibility
@@ -153,6 +154,51 @@ select results_eq(
   'scores: bob = 4 (120min) + 6 (2 interests) + 4 (same area) + 1 (same org); hank = 2 + 3 + 0 + 1'
 );
 
+-- Existing connection history is excluded from future matching. This is
+-- inserted as a trusted server-side fixture, so the connection trigger can
+-- create its normal conversation record as it would in production.
+insert into public.connections (requester_id, addressee_id, status)
+values (:'alice_id'::uuid, :'bob_id'::uuid, 'accepted');
+
+select is(
+  (select count(*) from public.matching_suggestions(:'alice_id')),
+  1::bigint,
+  'matching_suggestions excludes the already-connected user'
+);
+
+select ok(
+  not exists (
+    select 1 from public.matching_candidates(:'alice_id')
+    where candidate_id = :'bob_id'
+  ),
+  'existing connection history is excluded from matching candidates'
+);
+
+select pg_temp.create_test_user('ivy@student.uts.edu.au', 'Ivy') as ivy_id \gset
+select pg_temp.create_test_user('jack@student.uts.edu.au', 'Jack') as jack_id \gset
+select pg_temp.create_test_user('kim@student.uts.edu.au', 'Kim') as kim_id \gset
+
+insert into public.profile_interests (profile_id, interest_id) values
+  (:'ivy_id', :'coffee'), (:'jack_id', :'coffee'), (:'kim_id', :'coffee');
+
+insert into public.availabilities (user_id, area_id, start_time, end_time) values
+  (:'ivy_id', :'library', now() + interval '1 hour', now() + interval '3 hours'),
+  (:'jack_id', :'library', now() + interval '1 hour', now() + interval '3 hours'),
+  (:'kim_id', :'library', now() + interval '1 hour', now() + interval '3 hours');
+
+select is(
+  (select count(*) from public.matching_suggestions(:'alice_id')),
+  3::bigint,
+  'matching_suggestions returns exactly three when more than three candidates qualify'
+);
+
+select results_eq(
+  $$ select candidate_id from public.matching_suggestions('$$ || :'alice_id' || $$') $$,
+  $$ select candidate_id from public.matching_candidates('$$ || :'alice_id' || $$')
+     order by score desc, overlap_minutes desc, shared_interest_count desc, candidate_id asc limit 3 $$,
+  'top-three suggestions preserve the deterministic candidate ranking'
+);
+
 select ok(
   not exists (
     select 1 from public.matching_candidates(:'alice_id')
@@ -179,15 +225,15 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', :'alice_id', true);
 
 select is(
-  (select count(*) from public.matching_candidates()),
-  2::bigint,
-  'as alice, matching_candidates() with default arg returns her 2 candidates'
+  (select count(*) from public.matching_suggestions()),
+  3::bigint,
+  'as alice, matching_suggestions() returns at most three of her eligible candidates'
 );
 
 select is(
-  (select count(*) from public.matching_candidates(:'bob_id')),
+  (select count(*) from public.matching_suggestions(:'bob_id')),
   0::bigint,
-  'as alice, asking for bob''s candidates returns nothing'
+  'as alice, asking for bob''s suggestions returns nothing'
 );
 
 select is(
@@ -201,6 +247,28 @@ select is(
   '{}'::uuid[],
   'as alice, shared interests between two other users are hidden'
 );
+
+select set_config('request.jwt.claim.sub', :'grace_id', true);
+
+select is(
+  (select count(*) from public.matching_suggestions()),
+  0::bigint,
+  'unverified users cannot receive matching suggestions'
+);
+
+select is(
+  public.availability_overlap_minutes(:'grace_id', :'alice_id'),
+  0,
+  'unverified users cannot inspect availability overlap'
+);
+
+select is(
+  public.shared_interest_ids(:'grace_id', :'alice_id'),
+  '{}'::uuid[],
+  'unverified users cannot inspect shared interests'
+);
+
+select set_config('request.jwt.claim.sub', :'alice_id', true);
 
 -- ---------------------------------------------------------------------
 -- 26-28. Blocks RLS
@@ -239,9 +307,49 @@ select is(
 reset role;
 select set_config('request.jwt.claim.sub', '', true);
 
+-- The three connection states that suppress recommendations.
+insert into public.connections (requester_id, addressee_id, status)
+values (:'alice_id'::uuid, :'hank_id'::uuid, 'declined');
+insert into public.connections (requester_id, addressee_id, status)
+values (:'alice_id'::uuid, :'ivy_id'::uuid, 'pending');
+
+select ok(
+  not exists (
+    select 1 from public.matching_candidates(:'alice_id')
+    where candidate_id in (:'hank_id', :'ivy_id')
+  ),
+  'pending and declined connection history both suppress suggestions'
+);
+
+update public.connections
+set status = 'cancelled'
+where requester_id = :'alice_id'::uuid
+  and addressee_id = :'ivy_id'::uuid;
+
+select is(
+  (select count(*) from public.matching_candidates(:'alice_id') where candidate_id = :'ivy_id'::uuid),
+  1::bigint,
+  'a cancelled request no longer suppresses a candidate'
+);
+
 -- ---------------------------------------------------------------------
 -- 30. anon has no access to matching
 -- ---------------------------------------------------------------------
+
+select ok(
+  has_function_privilege('authenticated', 'public.matching_suggestions(uuid)', 'execute'),
+  'verified clients can call the top-three matching wrapper'
+);
+
+select ok(
+  not has_function_privilege('authenticated', 'public.matching_candidates(uuid)', 'execute'),
+  'authenticated clients cannot call the unbounded internal matching query'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.matching_suggestions(uuid)', 'execute'),
+  'anon cannot execute matching_suggestions'
+);
 
 select ok(
   not has_function_privilege('anon', 'public.matching_candidates(uuid)', 'execute'),

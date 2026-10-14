@@ -1,6 +1,6 @@
 -- Phase 4 (matching): shared interests and the deterministic matching query.
--- Depends on: 20260923134644_create_blocks (is_blocked_between) and
--- 20260923134645_matching_compatibility (area_compatibility, availability_overlap_minutes).
+-- Depends on the existing blocks/connections tables and
+-- 20261014090000_matching_compatibility.sql.
 --
 -- Implements the matching rules from Backend Docs v0.1 as database
 -- functions (spec: docs/backend/matching.md):
@@ -12,9 +12,7 @@
 --   4. ... in compatible approximate areas (same area, or same location).
 --   5. They share at least one interest.
 --   6. There is no block relationship (either direction).
---   7. They are not already connected -- NOT implemented here; see the
---      marked hook in matching_candidates(). Owner: "Exclude existing
---      connections" task, once the connections table exists.
+--   7. They have no pending, accepted or declined connection history.
 --
 -- Everything is a plain SQL function so the result is deterministic for
 -- the same data: no randomness, ties broken by candidate id.
@@ -40,7 +38,10 @@ as $$
     on b.interest_id = a.interest_id
    and b.profile_id = p_user_b
   where a.profile_id = p_user_a
-    and (auth.uid() is null or auth.uid() in (p_user_a, p_user_b))
+    and (
+      auth.uid() is null
+      or (public.is_verified_user() and auth.uid() in (p_user_a, p_user_b))
+    )
 $$;
 
 comment on function public.shared_interest_ids(uuid, uuid) is
@@ -73,7 +74,7 @@ comment on function public.shared_interest_count(uuid, uuid) is
 --   + 4 if they will be in the exact same area at an overlapping time
 --   + 1 if same organisation
 -- Ordering: score desc, overlap desc, shared interests desc, candidate id
--- asc -- fully deterministic. The suggestions endpoint applies `limit 3`.
+-- asc -- fully deterministic. matching_suggestions() applies the top-three limit.
 
 create or replace function public.matching_candidates(p_user_id uuid default auth.uid())
 returns table (
@@ -97,8 +98,7 @@ as $$
     from public.profiles p
     where p.id = p_user_id
       and (auth.uid() is null or p_user_id = auth.uid())
-      and p.account_status = 'verified'
-      and p.email_verified_at is not null
+      and public.is_verified_profile(p.id)
   ),
   my_avail as (
     select a.area_id,
@@ -114,8 +114,7 @@ as $$
     cross join me
     where p.id <> me.id
       -- 1. verified
-      and p.account_status = 'verified'
-      and p.email_verified_at is not null
+      and public.is_verified_profile(p.id)
       -- 2. approved community (organisation must still exist and be approved)
       and exists (
         select 1 from public.organisations o
@@ -124,10 +123,8 @@ as $$
       )
       -- 6. no block in either direction
       and not public.is_blocked_between(me.id, p.id)
-      -- 7. not already connected -- HOOK for the connections task:
-      --    and not exists (select 1 from public.connections c
-      --                    where (c.user_a = me.id and c.user_b = p.id)
-      --                       or (c.user_a = p.id and c.user_b = me.id))
+      -- 7. Skip pending, accepted and declined connection history.
+      and not public.has_connection_history(me.id, p.id)
       -- 5. at least one shared interest
       and exists (
         select 1
@@ -189,7 +186,36 @@ as $$
 $$;
 
 comment on function public.matching_candidates(uuid) is
-  'Deterministic ranked matching candidates for a user (self only from the client). Suggestions endpoint applies the limit.';
+  'Deterministic ranked matching candidates for a user (self only from the client).';
+
+create or replace function public.matching_suggestions(p_user_id uuid default auth.uid())
+returns table (
+  candidate_id uuid,
+  display_name text,
+  organisation_id uuid,
+  same_organisation boolean,
+  overlap_minutes integer,
+  best_area_level smallint,
+  shared_interest_count integer,
+  shared_interest_ids uuid[],
+  score numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select candidates.*
+  from public.matching_candidates(p_user_id) candidates
+  order by candidates.score desc,
+           candidates.overlap_minutes desc,
+           candidates.shared_interest_count desc,
+           candidates.candidate_id asc
+  limit 3
+$$;
+
+comment on function public.matching_suggestions(uuid) is
+  'Top three deterministic matching candidates; client calls are restricted to the caller.';
 
 
 -- =========================================================
@@ -198,11 +224,13 @@ comment on function public.matching_candidates(uuid) is
 
 revoke all on function public.shared_interest_ids(uuid, uuid) from public, anon;
 revoke all on function public.shared_interest_count(uuid, uuid) from public, anon;
-revoke all on function public.matching_candidates(uuid) from public, anon;
+revoke all on function public.matching_candidates(uuid) from public, anon, authenticated;
+revoke all on function public.matching_suggestions(uuid) from public, anon;
 
 grant execute on function public.shared_interest_ids(uuid, uuid) to authenticated;
 grant execute on function public.shared_interest_count(uuid, uuid) to authenticated;
-grant execute on function public.matching_candidates(uuid) to authenticated;
+grant execute on function public.matching_candidates(uuid) to service_role;
+grant execute on function public.matching_suggestions(uuid) to authenticated;
 
 
 -- =========================================================

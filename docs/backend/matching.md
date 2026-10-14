@@ -4,18 +4,18 @@ Phase 4 backend tasks: "Define matching rules", "Create matching
 query/function", "Add time-overlap calculation", "Add area compatibility",
 "Add shared-interest calculation", "Exclude blocked users".
 
-Not covered here (separate Phase 4 tasks): excluding existing connections,
-the suggestions endpoint (`POST /functions/v1/refresh-suggestions`,
-up-to-three limit), connection requests and their RLS, performance tests.
-Hooks for those are marked below.
+This implementation also excludes pending, accepted and declined connection
+history, exposes a top-three suggestions RPC, and provides the
+`POST /functions/v1/refresh-suggestions` Edge Function. Connection requests
+and their RLS remain in the existing connections migration.
 
 Migrations:
 
-- `20260923134644_create_blocks.sql` -- `blocks` table, `is_blocked_between()`
-- `20260923134645_matching_compatibility.sql` -- `area_compatibility()`, `availability_overlap_minutes()`
-- `20260923134646_matching_candidates.sql` -- `shared_interest_ids/count()`, `matching_candidates()`
+- `20260927100000_create_blocks.sql` -- `blocks` table, `is_blocked_between()`
+- `20261014090000_matching_compatibility.sql` -- `area_compatibility()`, `availability_overlap_minutes()`
+- `20261014090500_matching_candidates.sql` -- shared interests, `matching_candidates()`, `matching_suggestions()`
 
-Tests: `supabase/tests/008_matching.sql` (30 checks, end-to-end with real
+Tests: `supabase/tests/008_matching.sql` (43 checks, end-to-end with real
 test users).
 
 ## 1. Matching specification
@@ -30,7 +30,7 @@ User **B** is a candidate for user **A** when **all** of the following hold.
 | 4 | Their approximate areas are compatible | ... **and** whose `area_id`s are compatible: identical area (level 2) or different areas in the same `location` (level 1). Different locations are level 0 and never match. Time and area are evaluated on the same availability pair, so "free at the same time but on different campuses" is not a match. |
 | 5 | They have at least one shared interest | `profile_interests` intersection is non-empty |
 | 6 | There is no block relationship | No `blocks` row in either direction |
-| 7 | They are not already connected | **Hook only** (see `matching_candidates()` comment). Added by the connections task. |
+| 7 | They are not already connected | No pending, accepted or declined connection history exists between the pair. |
 
 Additional invariants:
 
@@ -62,8 +62,10 @@ neither dimension dominates. Weights are constants in
 
 ## 2. Functions
 
-All are `security definer`, `stable`, callable by `authenticated`; `anon`
-has no access.
+The database helpers are `security definer` and `stable`. Verified
+authenticated users can call the compatibility and shared-interest helpers;
+`matching_candidates()` is service-role-only, and clients use the top-three
+`matching_suggestions()` wrapper or the Edge Function. `anon` has no access.
 
 ### `area_compatibility(area_a uuid, area_b uuid) → smallint`
 
@@ -103,21 +105,23 @@ The matching query. Returns every candidate that passes rules 1-6, ranked.
 | `shared_interest_count`, `shared_interest_ids` | for "You both like ..." |
 | `score` | see above |
 
-From a client the function only answers for the caller: passing another
-user's id returns no rows. It never returns email, exact location,
-availability rows or anything not already readable under the `profiles`
-RLS.
+This internal query is callable only by `service_role`; it never returns
+email, exact location or availability rows.
+
+### `matching_suggestions(p_user_id uuid default auth.uid()) → table`
+
+Returns the first three rows from `matching_candidates()`. Client calls remain
+restricted to the caller, and the Edge Function is the frontend-facing route:
 
 ```js
-const { data: candidates } = await supabase.rpc('matching_candidates')
-// -> [{ candidate_id, display_name, overlap_minutes, shared_interest_ids, score, ... }, ...]
+const { data } = await supabase.functions.invoke('refresh-suggestions', {
+  body: {},
+})
 ```
 
-The suggestions endpoint owner should wrap this with `limit 3` (and any
-persistence / cooldown logic) rather than have the client call it directly
-in production, per Backend Docs v0.1 ("matching ... should be handled by
-Edge Functions"). The RPC is exposed to `authenticated` so the frontend can
-prototype against it now.
+The wrapper only returns suggestions for the authenticated caller and caps
+the result at three. The Edge Function checks authentication and verified
+organisation email and returns the shared `{ data, error }` response shape.
 
 ## 3. Blocks (scaffold for Phase 5)
 
@@ -128,9 +132,8 @@ pair, no self-block. Created here because rule 6 needs it. RLS:
 - There is deliberately **no** policy exposing rows by `blocked_id`: a
   blocked user must never learn they were blocked.
 
-Phase 5 ("Implement block user", `POST /functions/v1/block-user`) builds the
-workflow on top: applying `is_blocked_between()` to map, activities and
-chat visibility, and the report flow. The table should not need to change.
+Phase 5 applies `is_blocked_between()` to map, activities and chat visibility,
+and adds the report flow. The table does not need to change.
 
 ```js
 // Block (Phase 5 will move this behind an Edge Function)
@@ -141,13 +144,6 @@ await supabase.from('blocks').delete().eq('blocked_id', otherId)
 
 ## 4. Hooks left for the other Phase 4 tasks
 
-- **Exclude existing connections** -- add the `not exists (... connections ...)`
-  predicate at the marked line in `matching_candidates()` once the
-  `connections` table exists. Consider also excluding pairs with a pending
-  `connection_requests` row.
-- **Suggestions endpoint** -- `select * from matching_candidates(uid) limit 3`
-  inside `refresh-suggestions`, returning the shared `{ data, error }`
-  envelope.
 - **Performance** -- the query is set-based over indexed columns
   (`availabilities (area_id, end_time)`, `profile_interests (interest_id,
   profile_id)` added here, `blocks (blocker_id)` / `(blocked_id)`). With a
@@ -171,5 +167,6 @@ No new codes. Blocking uses the existing `blocked` code in
    `15` and `6`, exclusion of no-overlap / no-interest / blocked /
    wrong-location / unverified users, determinism, the self-only privacy
    guards under an `authenticated` JWT, and blocks RLS.
-3. Optional: as a real user in the app, `supabase.rpc('matching_candidates')`
-   should return only people you actually overlap with.
+3. `008_matching.sql` also verifies the deterministic top three, pending /
+   accepted / declined connection exclusions, cancelled-request re-eligibility,
+   verified-user privacy guards, and RPC privileges.

@@ -74,6 +74,7 @@ This document defines the response shape for (2). Direct client queries
 | `invalid_time_window` | Activity start/end time is invalid (in the past, end before start, or over the 4-hour max) |
 | `activity_cancelled` | The activity has been cancelled and can no longer be joined or edited |
 | `invalid_transition` | The requested participant status change isn't allowed (e.g. a declined request trying to become pending/accepted again) |
+| `matching_unavailable` | Matching suggestions could not be generated |
 
 Blocks are deliberately reported as `forbidden`, not `blocked`, so a
 blocked user can't tell -- see `docs/backend/moderation.md`.
@@ -86,3 +87,7 @@ this table is the shared contract frontend can rely on across phases.
 Edge Function routes are `kebab-case` verbs, matching Backend Docs v0.1,
 e.g. `POST /functions/v1/create-activity`,
 `POST /functions/v1/respond-to-connection-request`.
+
+Matching suggestions are available at `POST /functions/v1/refresh-suggestions`.
+The route returns at most three ranked results and rejects signed-out or
+unverified users.

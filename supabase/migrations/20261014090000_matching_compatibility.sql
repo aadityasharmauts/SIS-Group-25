@@ -76,7 +76,10 @@ as $$
    and public.area_compatibility(a.area_id, b.area_id) > 0
   where a.user_id = p_user_a
     and a.end_time > now()
-    and (auth.uid() is null or auth.uid() in (p_user_a, p_user_b))
+    and (
+      auth.uid() is null
+      or (public.is_verified_user() and auth.uid() in (p_user_a, p_user_b))
+    )
 $$;
 
 comment on function public.availability_overlap_minutes(uuid, uuid) is
